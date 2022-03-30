@@ -1,0 +1,18 @@
+{
+    "name": "pancake@is.editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:f889b4ab8c0b04d409f2bbd996249a4e"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
