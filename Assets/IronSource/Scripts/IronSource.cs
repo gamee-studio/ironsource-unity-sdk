@@ -7,7 +7,7 @@ public class IronSource : IronSourceIAgent
 {
 	private IronSourceIAgent _platformAgent;
 	private static IronSource _instance;
-	public static string UNITY_PLUGIN_VERSION = "7.2.1.1-r";
+	public static string UNITY_PLUGIN_VERSION = "7.2.1.2-r";
 	private static bool isUnsupportedPlatform;
 
 	private IronSource()

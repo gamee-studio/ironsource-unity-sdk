@@ -8,7 +8,7 @@
 
 #import <Foundation/Foundation.h>
 #import <IronSource/IronSource.h>
-static NSString *  UnityGitHash = @"e66aa96";
+static NSString *  UnityGitHash = @"54b9a34";
 
 @interface iOSBridge : NSObject<ISRewardedVideoDelegate,
 								ISDemandOnlyRewardedVideoDelegate, 
