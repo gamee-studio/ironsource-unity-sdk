@@ -40,6 +40,7 @@ extern "C" {
 
 @implementation iOSBridge
 
+static ISUnityBackgroundCallback backgroundCallback;
 char *const IRONSOURCE_EVENTS = "IronSourceEvents";
 
 + (iOSBridge *)start {
@@ -748,6 +749,10 @@ char *const IRONSOURCE_EVENTS = "IronSourceEvents";
 #pragma mark ImpressionData Delegate
 
 - (void)impressionDataDidSucceed:(ISImpressionData *)impressionData {
+    if (backgroundCallback!=nil) {
+            const char * serializedParameters = [self getJsonFromObj:[impressionData all_data]].UTF8String;
+            backgroundCallback(serializedParameters);
+        }
     UnitySendMessage(IRONSOURCE_EVENTS, "onImpressionSuccess", [self getJsonFromObj:[impressionData all_data]].UTF8String);
 
 }
@@ -808,6 +813,10 @@ char *const IRONSOURCE_EVENTS = "IronSourceEvents";
 #ifdef __cplusplus
 extern "C" {
 #endif
+    
+    void RegisterCallback(ISUnityBackgroundCallback func){
+         backgroundCallback=func;
+     }
     
     void CFSetPluginData(const char *pluginType, const char *pluginVersion, const char *pluginFrameworkVersion){
         [[iOSBridge start] setPluginDataWithType:GetStringParam(pluginType) pluginVersion:GetStringParam(pluginVersion) pluginFrameworkVersion:GetStringParam(pluginFrameworkVersion)];

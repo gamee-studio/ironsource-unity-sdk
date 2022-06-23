@@ -11,26 +11,19 @@ using UnityEngine.Networking;
 
 public class IronSourceDependenciesManager : EditorWindow
 {
-    private const string jsonURL = "http://ssa.public.s3.amazonaws.com/Ironsource-Integration-Manager/IronSourceSDKInfo.json";
-    private const string ironSourceDownloadDir = "Assets/IronSource/Editor/";
-    private const string sdk = "sdk";
-    private const string errorMessage = "SDK and adapters data are not available right now. Try again soon.";
-    private const int Width = 760;
-    private const int Height = 760;
-    private const string Android = "Android";
-    private const string iOS = "iOS";
-    private readonly SortedSet<providerInfo> providersSet = new SortedSet<providerInfo>(new ProviderInfoComparor());
-    private providerInfo ironSourceProviderInfo;
+    private readonly SortedSet<ProviderInfo> providersSet = new SortedSet<ProviderInfo>(new ProviderInfoComparor());
+    private ProviderInfo ironSourceProviderInfo;
     private UnityWebRequest downloadWebClient;
     private string messageData;
     private IronSourceEditorCoroutines mEditorCoroutines;
+    private static string latestUnitySDKVersion;
 
     private GUIStyle headerStyle;
     private GUIStyle textStyle;
     private GUIStyle boldTextStyle;
     private readonly GUILayoutOption buttonWidth = GUILayout.Width(90);
 
-    public class providerInfo
+    public class ProviderInfo
     {
         public Status currentStatues;
         public string providerName;
@@ -42,110 +35,89 @@ public class IronSourceDependenciesManager : EditorWindow
         public string fileName;
         public Dictionary<string, string> sdkVersionDic;
 
-        public providerInfo()
+        public ProviderInfo()
         {
             isNewProvider = false;
             fileName = string.Empty;
             downloadURL = string.Empty;
-            currentUnityVersion = "none";
+            currentUnityVersion = IronSourceDependenciesManagerConstants.NONE;
             sdkVersionDic = new Dictionary<string, string>();
         }
 
         public enum Status
         {
-            installed = 1,
-            none = 2,
-            updated = 3
+            INSTALLED = 1,
+            NONE = 2,
+            UPDATED = 3
         }
 
-        public bool GetFromJson(string name, Dictionary<string, object> dic)
+        public bool SetProviderDataProperties(string provider, Dictionary<string, object> providerData, Dictionary<string, object> providerXML)
         {
-            providerName = name;
+            providerName = provider;
             object obj;
 
-            dic.TryGetValue("keyname", out obj);
-            if (obj != null)
+            if (providerData.TryGetValue(IronSourceDependenciesManagerConstants.PROVIDER_KEY_NAME, out obj))
             {
-                this.displayProviderName = obj as string;
+                displayProviderName = obj as string;
             }
-            else this.displayProviderName = providerName;
+            else { displayProviderName = providerName; }
 
-            dic.TryGetValue("isNewProvider", out obj);
-            if (obj != null)
+            if (providerData.TryGetValue(IronSourceDependenciesManagerConstants.PROVIDER_IS_NEW, out obj))
             {
-                this.isNewProvider = bool.Parse(obj as string);
+                isNewProvider = bool.Parse(obj as string);
             }
 
-            //Get Unity versions
-            if (dic.TryGetValue("Unity", out obj))
+            if (providerXML.TryGetValue(IronSourceDependenciesManagerConstants.PROVIDER_DOWNLOAD_URL, out obj))
             {
-                Dictionary<string, object> remoteVersions = obj as Dictionary<string, object>;
-                if (remoteVersions != null)
-                {
-                    if (remoteVersions.TryGetValue("DownloadUrl", out obj))
-                    {
-                        this.downloadURL = obj as string;
-                    }
-                    if (remoteVersions.TryGetValue("FileName", out obj))
-                    {
-                        this.fileName = obj as string;
-                    }
-                    if (remoteVersions.TryGetValue("UnityAdapterVersion", out obj))
-                    {
-                        this.latestUnityVersion = obj as string;
-                    }
-                }
-            }
-            ////Get Android version
-            if (dic.TryGetValue(Android, out obj))
-            {
-                Dictionary<string, object> androidVersion = obj as Dictionary<string, object>;
-                if (androidVersion != null)
-                {
-                    androidVersion.TryGetValue("version", out obj);
-                    androidVersion = obj as Dictionary<string, object>;
-                    if (androidVersion != null)
-                    {
-                        if (androidVersion.TryGetValue(sdk, out obj))
-                        {
-                            this.sdkVersionDic.Add(Android, obj as string);
-                        }
-                    }
-                }
+                downloadURL = obj as string;
             }
 
-            //Get iOS version
-            dic.TryGetValue(iOS, out obj);
-            Dictionary<string, object> iosVersion = obj as Dictionary<string, object>;
-            if (iosVersion != null)
+            if (providerXML.TryGetValue(IronSourceDependenciesManagerConstants.PROVIDER_FILE_NAME, out obj))
             {
-                iosVersion.TryGetValue("version", out obj);
-                iosVersion = obj as Dictionary<string, object>;
-                if (iosVersion != null)
+                fileName = obj as string;
+            }
+
+            if (providerData.TryGetValue(IronSourceDependenciesManagerConstants.PROVIDER_ANDROID_SDK_VER, out obj))
+            {
+                sdkVersionDic.Add(IronSourceDependenciesManagerConstants.ANDROID, obj as string);
+            }
+
+            if (providerData.TryGetValue(IronSourceDependenciesManagerConstants.PROVIDER_IOS_SDK_VER, out obj))
+            {
+                sdkVersionDic.Add(IronSourceDependenciesManagerConstants.IOS, obj as string);
+            }
+
+            if (providerData.TryGetValue(IronSourceDependenciesManagerConstants.PROVIDER_UNITY_ADAPTER_VERSION, out obj))
+            {
+                if ((providerName.ToLower() != IronSourceDependenciesManagerConstants.IRONSOURCE))
                 {
-                    if (iosVersion.TryGetValue(sdk, out obj))
-                    {
-                        this.sdkVersionDic.Add(iOS, obj as string);
-                    }
+                    latestUnityVersion = obj as string;
+
                 }
+                else
+                {
+                    latestUnityVersion = latestUnitySDKVersion;
+                }
+
+                downloadURL = downloadURL.Replace(IronSourceDependenciesManagerConstants.UNITY_ADAPTER_MACRO, latestUnityVersion);
             }
 
             currentUnityVersion = GetVersionFromXML(fileName);
 
-            if (currentUnityVersion.Equals("none"))
+            if (currentUnityVersion.Equals(IronSourceDependenciesManagerConstants.NONE))
             {
-                currentStatues = Status.none;
+                currentStatues = Status.NONE;
             }
 
             else
             {
                 if (isNewerVersion(currentUnityVersion, latestUnityVersion))
                 {
-                    currentStatues = Status.installed;
+                    currentStatues = Status.INSTALLED;
                 }
                 else
                 {
-                    currentStatues = Status.updated;
+                    currentStatues = Status.UPDATED;
                 }
             }
 
@@ -156,64 +128,96 @@ public class IronSourceDependenciesManager : EditorWindow
     private static string GetVersionFromXML(string fileName)
     {
         XmlDocument xmlDoc = new XmlDocument();
-        string version = "none";
+        string version = IronSourceDependenciesManagerConstants.NONE;
         try
         {
-            xmlDoc.LoadXml(File.ReadAllText(ironSourceDownloadDir + fileName));
+            xmlDoc.LoadXml(File.ReadAllText(IronSourceDependenciesManagerConstants.IRONSOURCE_DOWNLOAD_DIR + fileName));
         }
         catch (Exception)
         {
             return version;
         }
-        var unityVersion = xmlDoc.SelectSingleNode("dependencies/unityversion");
+        var unityVersion = xmlDoc.SelectSingleNode(IronSourceDependenciesManagerConstants.IRONSOURCE_XML_PATH);
         if (unityVersion != null)
         {
             return (unityVersion.InnerText);
         }
-        File.Delete(ironSourceDownloadDir + fileName);
+        File.Delete(IronSourceDependenciesManagerConstants.IRONSOURCE_DOWNLOAD_DIR + fileName);
         return version;
     }
 
-    [Obsolete]
-    private IEnumerator GetVersions()
-    {
-        UnityWebRequest unityWebRequest = UnityWebRequest.Get(jsonURL);
-        var webRequest = unityWebRequest.SendWebRequest();
 
-        while (!webRequest.isDone)
+    private IEnumerator SetProviderData()
+    {
+        UnityWebRequest unityWebRequestLinkJson = UnityWebRequest.Get(IronSourceDependenciesManagerConstants.IRONSOURCE_SDK_XML_LINKS);
+        UnityWebRequest unityWebRequesInfoJson = UnityWebRequest.Get(IronSourceDependenciesManagerConstants.IRONSOURCE_SDK_INFO);
+        var webRequestLinks = unityWebRequestLinkJson.SendWebRequest();
+        var webRequestSDKInfo = unityWebRequesInfoJson.SendWebRequest();
+
+        while (!webRequestLinks.isDone || !webRequestSDKInfo.isDone)
         {
             yield return new WaitForSeconds(0.1f);
         }
-        if (!unityWebRequest.isHttpError && !unityWebRequest.isNetworkError)
+
+#if UNITY_2020_1_OR_NEWER
+        if (unityWebRequestLinkJson.result != UnityWebRequest.Result.ProtocolError && unityWebRequesInfoJson.result != UnityWebRequest.Result.ProtocolError)
+#else
+        if (!unityWebRequestLinkJson.isHttpError && !unityWebRequestLinkJson.isNetworkError && !unityWebRequesInfoJson.isError && !unityWebRequesInfoJson.isHttpError)
+#endif
         {
-            string json = unityWebRequest.downloadHandler.text;
+            string linksJson = unityWebRequestLinkJson.downloadHandler.text;
+            string SDKInfoJson = unityWebRequesInfoJson.downloadHandler.text;
             providersSet.Clear();
-            ironSourceProviderInfo = new providerInfo();
-            Dictionary<string, object> dic = new Dictionary<string, object>();
+
+            Dictionary<string, object> linksDictionary = new Dictionary<string, object>();
+            Dictionary<string, object> SDKInfoDictionary = new Dictionary<string, object>();
             try
             {
-                dic = Json.Deserialize(json) as Dictionary<string, object>;
+                linksDictionary = Json.Deserialize(linksJson) as Dictionary<string, object>;
+                SDKInfoDictionary = Json.Deserialize(SDKInfoJson) as Dictionary<string, object>;
             }
 
             catch (Exception e)
             {
                 Debug.Log("Error getting response " + e.ToString());
             }
-            if (dic != null && dic.Count != 0)
+
+            if (SDKInfoDictionary != null && SDKInfoDictionary.Count != 0 && linksDictionary != null && linksDictionary.Count != 0)
             {
+                string requiredVersion;
                 object providersJson;
-                if (dic.TryGetValue("SDKSInfo", out providersJson))
+
+                ironSourceProviderInfo = new ProviderInfo();
+                ironSourceProviderInfo.currentUnityVersion = GetVersionFromXML(IronSourceDependenciesManagerConstants.IRONSOURCE_XML);
+                SDKInfoDictionary.TryGetValue(IronSourceDependenciesManagerConstants.LATEST_SDK_VERSION, out providersJson);
+                latestUnitySDKVersion = providersJson.ToString();
+                ironSourceProviderInfo.latestUnityVersion = providersJson.ToString();
+
+                requiredVersion = (ironSourceProviderInfo.currentUnityVersion == IronSourceDependenciesManagerConstants.NONE) ? ironSourceProviderInfo.latestUnityVersion : ironSourceProviderInfo.currentUnityVersion;
+
+                if (SDKInfoDictionary.TryGetValue(requiredVersion, out providersJson))
                 {
                     if (providersJson != null)
                     {
                         foreach (var item in providersJson as Dictionary<string, object>)
                         {
-                            providerInfo info = new providerInfo();
-                            if (info.GetFromJson(item.Key, item.Value as Dictionary<string, object>))
+                            ProviderInfo info = new ProviderInfo();
+
+                            object providerXML;
+
+                            linksDictionary.TryGetValue(item.Key.ToLower(), out providerXML);
+
+                            if (info.SetProviderDataProperties(item.Key, item.Value as Dictionary<string, object>, providerXML as Dictionary<string, object>))
                             {
-                                if (item.Key.ToLower().Contains("ironsource"))
+                                if (item.Key.ToLower().Contains(IronSourceDependenciesManagerConstants.IRONSOURCE))
                                 {
-                                    ironSourceProviderInfo = info;
+                                    ironSourceProviderInfo.displayProviderName = info.displayProviderName;
+                                    ironSourceProviderInfo.downloadURL = info.downloadURL;
+                                    ironSourceProviderInfo.providerName = info.providerName;
+                                    ironSourceProviderInfo.sdkVersionDic = info.sdkVersionDic;
+                                    ironSourceProviderInfo.fileName = info.fileName;
+                                    ironSourceProviderInfo.currentStatues = info.currentStatues;
+
                                 }
                                 else
                                 {
@@ -224,16 +228,16 @@ public class IronSourceDependenciesManager : EditorWindow
                     }
                 }
 
-                if (ironSourceProviderInfo.currentStatues == providerInfo.Status.installed || ironSourceProviderInfo.currentStatues == providerInfo.Status.none)
+                if (ironSourceProviderInfo.currentStatues == ProviderInfo.Status.INSTALLED || ironSourceProviderInfo.currentStatues == ProviderInfo.Status.NONE)
                 {
-                    if (dic.TryGetValue("UpdateMessage", out providersJson))
+                    if (SDKInfoDictionary.TryGetValue(IronSourceDependenciesManagerConstants.UPDATE_MSG, out providersJson))
                     {
                         messageData = providersJson.ToString();
                     }
                 }
                 else
                 {
-                    if (dic.TryGetValue("LatestMessage", out providersJson))
+                    if (SDKInfoDictionary.TryGetValue(IronSourceDependenciesManagerConstants.LATEST_MSG, out providersJson))
                     {
                         messageData = providersJson.ToString();
                     }
@@ -264,8 +268,8 @@ public class IronSourceDependenciesManager : EditorWindow
 
     public static void ShowISDependenciesManager()
     {
-        var win = GetWindowWithRect<IronSourceDependenciesManager>(new Rect(0, 0, Width, Height), true);
-        win.titleContent = new GUIContent("ironSource Integration Manager");
+        var win = GetWindowWithRect<IronSourceDependenciesManager>(new Rect(0, 0, IronSourceDependenciesManagerConstants.WIDTH, IronSourceDependenciesManagerConstants.HEIGHT), true);
+        win.titleContent = new GUIContent(IronSourceDependenciesManagerConstants.INTERGRATION_MANAGER_TITLE);
         win.Focus();
     }
 
@@ -277,7 +281,7 @@ public class IronSourceDependenciesManager : EditorWindow
             fontSize = 14,
             fixedHeight = 20,
             stretchWidth = true,
-            fixedWidth = Width / 4 + 5,
+            fixedWidth = IronSourceDependenciesManagerConstants.WIDTH / 4 + 5,
             clipping = TextClipping.Overflow,
             alignment = TextAnchor.MiddleLeft
         };
@@ -296,7 +300,7 @@ public class IronSourceDependenciesManager : EditorWindow
 
     private void OnEnable()
     {
-        mEditorCoroutines = IronSourceEditorCoroutines.StartEditorCoroutine(GetVersions());
+        mEditorCoroutines = IronSourceEditorCoroutines.StartEditorCoroutine(SetProviderData());
     }
 
     private void OnDestroy()
@@ -305,70 +309,60 @@ public class IronSourceDependenciesManager : EditorWindow
         AssetDatabase.Refresh();
     }
 
-    void DrawProviderItem(providerInfo providerData)
+    void DrawProviderItem(ProviderInfo providerData)
     {
-        if (!providerData.Equals(default(providerInfo)))
+        if (!providerData.Equals(default(ProviderInfo)))
         {
             using (new EditorGUILayout.HorizontalScope(GUILayout.ExpandWidth(false)))
             {
                 GUI.enabled = true;
                 bool isNew = providerData.isNewProvider;
-                string isNewAddition = isNew ? " - New Network" : string.Empty;
-                string androidVersion = "";
-                string iosVersion = "";
-                string tooltipText = "Latest Version: \n " + providerData.providerName + " Adapter Version " + providerData.latestUnityVersion;
-                if (!providerData.sdkVersionDic.TryGetValue(Android, out androidVersion))
+                string isNewAddition = isNew ? IronSourceDependenciesManagerConstants.NEW_NETWORK : string.Empty;
+
+                string tooltipText = IronSourceDependenciesManagerConstants.TOOLTIP_LATEST_VERSION + " \n " + providerData.providerName + " " + IronSourceDependenciesManagerConstants.TOOLTIP_ADAPTER_VERSION + " " + providerData.latestUnityVersion;
+                if (providerData.sdkVersionDic.TryGetValue(IronSourceDependenciesManagerConstants.ANDROID, out string androidVersion))
                 {
-                    androidVersion = "";
+                    tooltipText = tooltipText + "\n " + IronSourceDependenciesManagerConstants.TOOLTIP_ANDROID_SDK + " " + androidVersion;
                 }
-                else tooltipText = tooltipText + "\n Android SDK version " + androidVersion;
-                if (!providerData.sdkVersionDic.TryGetValue(iOS, out iosVersion))
+                if (providerData.sdkVersionDic.TryGetValue(IronSourceDependenciesManagerConstants.IOS, out string iosVersion))
                 {
-                    iosVersion = "";
+                    tooltipText = tooltipText + "\n " + IronSourceDependenciesManagerConstants.TOOLTIP_IOS_SDK + " " + iosVersion;
                 }
-                else tooltipText = tooltipText + "\n iOS SDK version " + iosVersion;
 
                 EditorGUILayout.LabelField(providerData.displayProviderName + isNewAddition, isNew ? boldTextStyle : textStyle);
                 EditorGUILayout.LabelField(providerData.currentUnityVersion, textStyle);
                 EditorGUILayout.LabelField(providerData.latestUnityVersion, textStyle);
 
-                if (providerData.currentStatues == providerInfo.Status.none)
-                {
-                    bool btn = GUILayout.Button(new GUIContent
-                    {
-                        text = "Install",
-                        tooltip = tooltipText
-                    }, buttonWidth);
-                    if (btn && downloadWebClient == null)
-                    {
-                        GUI.enabled = true;
-                        IronSourceEditorCoroutines.StartEditorCoroutine(DownloadFile(providerData.downloadURL));
-                    }
+                string downloadButtonText;
 
-                }
-                else if (providerData.currentStatues == providerInfo.Status.installed)
+                switch (providerData.currentStatues)
                 {
-                    var btn = GUILayout.Button(new GUIContent
-                    {
-                        text= "Update",
-                        tooltip = tooltipText
-                    }
-                    ,buttonWidth);
-                    if (btn && downloadWebClient == null)
-                    {
-                        GUI.enabled = true;
-                        IronSourceEditorCoroutines.StartEditorCoroutine(DownloadFile(providerData.downloadURL));
-                    }
+                    case ProviderInfo.Status.NONE:
+                        downloadButtonText = IronSourceDependenciesManagerConstants.LABEL_INSTALL;
+                        break;
+                    case ProviderInfo.Status.INSTALLED:
+                        downloadButtonText = IronSourceDependenciesManagerConstants.LABEL_UPDATE;
+                        break;
+
+                    default:
+                        downloadButtonText = IronSourceDependenciesManagerConstants.LABEL_UPDATED;
+                        GUI.enabled = false;
+                        break;
                 }
-                else
+
+                GUIContent gUIContent = new GUIContent
                 {
-                    GUI.enabled = false;
-                    GUILayout.Button(new GUIContent
-                    {
-                        text = "Updated",
-                        tooltip = tooltipText
-                    }, buttonWidth);
+                    text = downloadButtonText,
+                    tooltip = tooltipText
+                };
+
+                bool btn = GUILayout.Button(gUIContent, buttonWidth);
+                if (btn && downloadWebClient == null)
+                {
+                    GUI.enabled = true;
+                    IronSourceEditorCoroutines.StartEditorCoroutine(DownloadFile(providerData.downloadURL));
                 }
+
                 GUILayout.Space(5);
                 GUI.enabled = true;
             }
@@ -379,7 +373,7 @@ public class IronSourceDependenciesManager : EditorWindow
     {
         if (ironSourceProviderInfo == null)
         {
-            GUILayout.Label(errorMessage);
+            GUILayout.Label(IronSourceDependenciesManagerConstants.ERROR_NOT_AVAILABLE);
             return;
         }
 
@@ -428,18 +422,18 @@ public class IronSourceDependenciesManager : EditorWindow
     {
         using (new EditorGUILayout.HorizontalScope(GUILayout.ExpandWidth(false)))
         {
-            EditorGUILayout.LabelField("Current SDK Version", new GUIStyle(EditorStyles.label)
+            EditorGUILayout.LabelField(IronSourceDependenciesManagerConstants.LABEL_CURRENT_SDK, new GUIStyle(EditorStyles.label)
             {
                 fontStyle = FontStyle.Bold,
                 fontSize = 13,
                 fixedHeight = 20,
                 stretchWidth = true,
-                fixedWidth = Width / 4,
+                fixedWidth = IronSourceDependenciesManagerConstants.WIDTH / 4,
                 clipping = TextClipping.Overflow,
-                padding = new RectOffset(Width / 4 + 15, 0, 0, 0)
+                padding = new RectOffset(IronSourceDependenciesManagerConstants.WIDTH / 4 + 15, 0, 0, 0)
             });
             GUILayout.Space(85);
-            EditorGUILayout.LabelField("Latest SDK Version", new GUIStyle(EditorStyles.label)
+            EditorGUILayout.LabelField(IronSourceDependenciesManagerConstants.LABEL_LATEST_SDK, new GUIStyle(EditorStyles.label)
             {
                 fontStyle = FontStyle.Bold,
                 fontSize = 13,
@@ -455,11 +449,11 @@ public class IronSourceDependenciesManager : EditorWindow
     {
         using (new EditorGUILayout.HorizontalScope(GUILayout.ExpandWidth(false)))
         {
-            EditorGUILayout.LabelField("Network", headerStyle);
-            EditorGUILayout.LabelField("Current Adapter Version", headerStyle);
-            EditorGUILayout.LabelField("Latest Adapter Version", headerStyle);
+            EditorGUILayout.LabelField(IronSourceDependenciesManagerConstants.LABEL_NETWORK, headerStyle);
+            EditorGUILayout.LabelField(IronSourceDependenciesManagerConstants.LABEL_CURRENT_SDK, headerStyle);
+            EditorGUILayout.LabelField(IronSourceDependenciesManagerConstants.LABEL_LATEST_SDK, headerStyle);
             GUILayout.Space(30);
-            EditorGUILayout.LabelField("Action", headerStyle);
+            EditorGUILayout.LabelField(IronSourceDependenciesManagerConstants.LABEL_Action, headerStyle);
         }
     }
 
@@ -469,12 +463,17 @@ public class IronSourceDependenciesManager : EditorWindow
         string downloadFileName = downloadFileUrl.Substring(fileNameIndex);
         string fileDownloading = string.Format("Downloading {0}", downloadFileName);
         string genericFileName = Regex.Replace(downloadFileName, @"_v+(\d\.\d\.\d\.\d|\d\.\d\.\d)", "");
-        string path = Path.Combine(ironSourceDownloadDir, genericFileName);
+        string path = Path.Combine(IronSourceDependenciesManagerConstants.IRONSOURCE_DOWNLOAD_DIR, genericFileName);
         bool isCancelled = false;
         downloadWebClient = new UnityWebRequest(downloadFileUrl);
         downloadWebClient.downloadHandler = new DownloadHandlerFile(path);
         downloadWebClient.SendWebRequest();
+
+#if UNITY_2020_1_OR_NEWER
+        if (downloadWebClient.result != UnityWebRequest.Result.ProtocolError)
+#else
         if (!downloadWebClient.isHttpError && !downloadWebClient.isNetworkError)
+#endif
         {
             while (!downloadWebClient.isDone)
             {
@@ -499,24 +498,24 @@ public class IronSourceDependenciesManager : EditorWindow
 
         if (genericFileName.EndsWith(".unitypackage") && !isCancelled)
         {
-            AssetDatabase.ImportPackage(Path.Combine(ironSourceDownloadDir, genericFileName), true);
+            AssetDatabase.ImportPackage(Path.Combine(IronSourceDependenciesManagerConstants.IRONSOURCE_DOWNLOAD_DIR, genericFileName), true);
         }
         else
         {
             // in case the download was cancelled, delete the file
-            if(isCancelled && File.Exists(ironSourceDownloadDir + genericFileName))
+            if (isCancelled && File.Exists(IronSourceDependenciesManagerConstants.IRONSOURCE_DOWNLOAD_DIR + genericFileName))
             {
-                File.Delete(ironSourceDownloadDir + genericFileName);
+                File.Delete(IronSourceDependenciesManagerConstants.IRONSOURCE_DOWNLOAD_DIR + genericFileName);
             }
 
-            IronSourceEditorCoroutines.StartEditorCoroutine(GetVersions());
+            IronSourceEditorCoroutines.StartEditorCoroutine(SetProviderData());
         }
 
         //clean the downloadWebClient object regardless of whether the request succeeded or failed 
         downloadWebClient.Dispose();
         downloadWebClient = null;
 
-        IronSourceEditorCoroutines.StartEditorCoroutine(GetVersions());
+        IronSourceEditorCoroutines.StartEditorCoroutine(SetProviderData());
     }
 
     private static bool isNewerVersion(string current, string latest)
@@ -549,9 +548,9 @@ public class IronSourceDependenciesManager : EditorWindow
 
     }
 
-    internal class ProviderInfoComparor : IComparer<providerInfo>
+    internal class ProviderInfoComparor : IComparer<ProviderInfo>
     {
-        public int Compare(providerInfo x, providerInfo y)
+        public int Compare(ProviderInfo x, ProviderInfo y)
         {
             return x.providerName.CompareTo(y.providerName);
         }

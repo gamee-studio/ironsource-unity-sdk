@@ -19,7 +19,11 @@ public class IronSourceMediationSettings : ScriptableObject
 	[Tooltip("Add Ironsource SKAdNetworkIdentifier to your Info.plist for iOS 14+")]
     public bool AddIronsourceSkadnetworkID;
 
-    [Header("Project Features")]
+	[Header("Google Play Services Settings")]
+	[Tooltip("Add Google Play Services normal permission for API level 31 (Android 12)")]
+	public bool DeclareAD_IDPermission;
+
+	[Header("Project Features")]
 	public bool EnableAdapterDebug;
 
 	public bool EnableIntegrationHelper;

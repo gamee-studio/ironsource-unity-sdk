@@ -1,5 +1,4 @@
 #if UNITY_ANDROID
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -20,7 +19,10 @@ public class IronSourceManifestProcessor : IPreprocessBuild
 #endif
 {
     private const string META_APPLICATION_ID = "com.google.android.gms.ads.APPLICATION_ID";
-
+    private const string AD_ID_PERMISSION_ATTR = "com.google.android.gms.permission.AD_ID";
+    private const string MANIFEST_PERMISSION = "uses-permission";
+    private const string MANIFEST_META_DATA = "meta-data";
+    private string manifestPath = Path.Combine(Application.dataPath, "IronSource/Plugins/Android/IronSource.plugin/AndroidManifest.xml");
     private XNamespace ns = "http://schemas.android.com/apk/res/android";
 
     public int callbackOrder { get { return 0; } }
@@ -31,41 +33,19 @@ public class IronSourceManifestProcessor : IPreprocessBuild
     public void OnPreprocessBuild(BuildTarget target, string path)
 #endif
     {
+        XElement elemManifest = ValidateAndroidManifest();
+
+        XElement elemApplication = elemManifest.Element("application");
+
         if (File.Exists(IronSourceMediatedNetworkSettings.MEDIATION_SETTINGS_ASSET_PATH))
         {
             string appId = IronSourceMediatedNetworkSettingsInspector.IronSourceMediatedNetworkSettings.AdmobAndroidAppId;
 
+            IEnumerable<XElement> metas = elemApplication.Descendants()
+        .Where(elem => elem.Name.LocalName.Equals(MANIFEST_META_DATA));
+
             if (IronSourceMediatedNetworkSettingsInspector.IronSourceMediatedNetworkSettings.EnableAdmob)
             {
-                string manifestPath = Path.Combine(
-                        Application.dataPath, "IronSource/Plugins/Android/IronSource.plugin/AndroidManifest.xml");
-
-                XDocument manifest = null;
-                try
-                {
-                    manifest = XDocument.Load(manifestPath);
-                }
-#pragma warning disable 0168
-                catch (IOException e)
-#pragma warning restore 0168
-                {
-                    StopBuildWithMessage("AndroidManifest.xml is missing. Try re-importing the plugin.");
-                }
-
-                XElement elemManifest = manifest.Element("manifest");
-                if (elemManifest == null)
-                {
-                    StopBuildWithMessage("AndroidManifest.xml is not valid. Try re-importing the plugin.");
-                }
-
-                XElement elemApplication = elemManifest.Element("application");
-                if (elemApplication == null)
-                {
-                    StopBuildWithMessage("AndroidManifest.xml is not valid. Try re-importing the plugin.");
-                }
-
-                IEnumerable<XElement> metas = elemApplication.Descendants()
-                        .Where(elem => elem.Name.LocalName.Equals("meta-data"));
 
                 XElement elemAdMobEnabled = GetMetaElement(metas, META_APPLICATION_ID);
 
@@ -89,15 +69,45 @@ public class IronSourceManifestProcessor : IPreprocessBuild
                     elemAdMobEnabled.SetAttributeValue(ns + "value", appId);
                 }
 
-                elemManifest.Save(manifestPath);
+            }
+            else if (GetPermissionElement(metas, META_APPLICATION_ID) != null)
+            {
+                //remove admob app id in case flag is off
+                GetPermissionElement(metas, META_APPLICATION_ID).Remove();
             }
         }
+
+        if (File.Exists(IronSourceMediationSettings.IRONSOURCE_SETTINGS_ASSET_PATH))
+        {
+            IEnumerable<XElement> permissons = elemManifest.Descendants().Where(elem => elem.Name.LocalName.Equals(MANIFEST_PERMISSION));
+
+            if (IronSourceMediationSettingsInspector.IronSourceMediationSettings.DeclareAD_IDPermission && GetPermissionElement(permissons, AD_ID_PERMISSION_ATTR) == null)
+            {
+
+                elemManifest.Add(CreatePermissionElement(AD_ID_PERMISSION_ATTR));
+            }
+
+            else if (GetPermissionElement(permissons, AD_ID_PERMISSION_ATTR) != null && !IronSourceMediationSettingsInspector.IronSourceMediationSettings.DeclareAD_IDPermission)
+            {
+                //remove the permission if flag is false
+                GetPermissionElement(permissons, AD_ID_PERMISSION_ATTR).Remove();
+            }
+        }
+
+        elemManifest.Save(manifestPath);
+
     }
 
     private XElement CreateMetaElement(string name, object value)
     {
-        return new XElement("meta-data",
+        return new XElement(MANIFEST_META_DATA,
                 new XAttribute(ns + "name", name), new XAttribute(ns + "value", value));
+    }
+
+    private XElement CreatePermissionElement(string name)
+    {
+        return new XElement(MANIFEST_PERMISSION,
+                new XAttribute(ns + "name", name));
     }
 
     private XElement GetMetaElement(IEnumerable<XElement> metas, string metaName)
@@ -117,6 +127,24 @@ public class IronSourceManifestProcessor : IPreprocessBuild
         return null;
     }
 
+    private XElement GetPermissionElement(IEnumerable<XElement> manifest, string permissionName)
+    {
+
+        foreach (XElement elem in manifest)
+        {
+            IEnumerable<XAttribute> attrs = elem.Attributes();
+            foreach (XAttribute attr in attrs)
+            {
+                if (attr.Name.Namespace.Equals(ns)
+                        && attr.Name.LocalName.Equals("name") && attr.Value.Equals(permissionName))
+                {
+                    return elem;
+                }
+            }
+        }
+        return null;
+    }
+
     private void StopBuildWithMessage(string message)
     {
         string prefix = "[IronSourceApplicationSettings] ";
@@ -128,6 +156,36 @@ public class IronSourceManifestProcessor : IPreprocessBuild
 #else
         throw new OperationCanceledException(prefix + message);
 #endif
+    }
+
+    private XElement ValidateAndroidManifest()
+    {
+
+        XDocument manifest = null;
+        try
+        {
+            manifest = XDocument.Load(manifestPath);
+        }
+#pragma warning disable 0168
+        catch (IOException e)
+#pragma warning restore 0168
+        {
+            StopBuildWithMessage("AndroidManifest.xml is missing. Try re-importing the plugin.");
+        }
+
+        XElement elemManifest = manifest.Element("manifest");
+        if (elemManifest == null)
+        {
+            StopBuildWithMessage("AndroidManifest.xml is not valid. Try re-importing the plugin.");
+        }
+
+        XElement elemApplication = elemManifest.Element("application");
+        if (elemApplication == null)
+        {
+            StopBuildWithMessage("AndroidManifest.xml is not valid. Try re-importing the plugin.");
+        }
+
+        return elemManifest;
     }
 }
 

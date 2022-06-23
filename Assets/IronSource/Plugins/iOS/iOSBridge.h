@@ -8,7 +8,9 @@
 
 #import <Foundation/Foundation.h>
 #import <IronSource/IronSource.h>
-static NSString *  UnityGitHash = @"54b9a34";
+static NSString *  UnityGitHash = @"dedda14";
+typedef void (*ISUnityBackgroundCallback)(const char* args);
+
 
 @interface iOSBridge : NSObject<ISRewardedVideoDelegate,
 								ISDemandOnlyRewardedVideoDelegate, 
